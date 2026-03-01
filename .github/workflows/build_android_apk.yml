@@ -1,19 +1,21 @@
 name: Build Android APK
 on: [push]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fix Permissions
-        run: sudo chown -R $USER:$USER .
-      - name: Build
-        run: |
-          pip install buildozer cython==0.29.33
-          buildozer android clean
-          yes | buildozer android debug
-      - name: Upload
+
+      - name: Build with Buildozer
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
+        with:
+          command: buildozer android clean; buildozer -v android debug
+          buildozer_version: stable
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk
-          path: bin/*.apk
+          name: nexusvision-apk
+          path: ${{ steps.buildozer.outputs.filename }}
