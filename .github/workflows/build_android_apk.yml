@@ -6,23 +6,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - name: Install Buildozer
+
+      - name: Build APK in Docker (kivy/buildozer)
         run: |
-          sudo apt update
-          sudo apt install -y build-essential git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev openjdk-17-jdk-headless zip unzip
-          pip install --user --upgrade buildozer cython==0.29.33
-      - name: Build APK
-        run: |
-          export PATH=$PATH:~/.local/bin
-          buildozer android clean
-          yes | buildozer android debug
+          docker run --rm \
+            -v "${{ github.workspace }}:/home/user/hostcwd" \
+            -w /home/user/hostcwd \
+            kivy/buildozer:latest \
+            /bin/bash -lc "buildozer android clean && buildozer -v android debug"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: nexusvision-apk
-          path: bin/*.apk
-
+          path: |
+            bin/*.apk
+            bin/*/*.apk
