@@ -8,11 +8,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Fix Directory Permissions
-        run: |
-          git config --global --add safe.directory /home/runner/work/Nexus_Project/Nexus_Project
-          sudo chown -R $USER:$USER .
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -27,7 +22,9 @@ jobs:
       - name: Build with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
+          # التنظيف الشامل قبل البدء لتجنب خطأ 100
           buildozer android clean
+          # بدء البناء مع قبول التراخيص
           yes | buildozer android debug
         continue-on-error: false
 
