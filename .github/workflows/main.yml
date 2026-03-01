@@ -8,7 +8,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # إصلاح مشكلة الصلاحيات التي تسبب خطأ 100
       - name: Fix Directory Permissions
         run: |
           git config --global --add safe.directory /home/runner/work/Nexus_Project/Nexus_Project
@@ -28,9 +27,7 @@ jobs:
       - name: Build with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          # تنظيف إجباري قبل البدء
           buildozer android clean
-          # بدء البناء مع قبول التراخيص
           yes | buildozer android debug
         continue-on-error: false
 
