@@ -5,24 +5,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4 # تم التحديث إلى v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Build APK in Docker (kivy/buildozer)
-        run: |
-          # استخدام حاوية buildozer الرسمية لبناء التطبيق
-          docker run --rm \
-            -v "${{ github.workspace }}:/home/user/hostcwd" \
-            -w /home/user/hostcwd \
-            kivy/buildozer:latest \
-            /bin/bash -lc "buildozer -v android debug"
+      - name: Build with Buildozer
+        uses: ArtemSerebrennkov/buildozer-action@v1
+        with:
+          command: buildozer android debug
+          repository_root: .
 
-      - name: Upload built APK (artifact)
-        uses: actions/upload-artifact@v4 # هنا حل المشكلة: التحديث إلى v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: nexusvision-apk
-          path: |
-            bin/*.apk
-            bin/*/*.apk
-            bin/*/*.aab
-            bin/*.aab
+          path: bin/*.apk
