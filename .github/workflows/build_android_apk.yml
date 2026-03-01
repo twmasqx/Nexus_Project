@@ -1,0 +1,29 @@
+name: Build Android APK
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build APK in Docker (kivy/buildozer)
+        run: |
+          # use the official kivy/buildozer image to run buildozer inside container
+          docker run --rm \
+            -v "${{ github.workspace }}:/home/user/hostcwd" \
+            -w /home/user/hostcwd \
+            kivy/buildozer:latest \
+            /bin/bash -lc "buildozer android clean && buildozer -v android debug"
+
+      - name: Upload built APK (artifact)
+        uses: actions/upload-artifact@v3
+        with:
+          name: nexusvision-apk
+          path: |
+            bin/*.apk
+            bin/*/*.apk
+            bin/*/*.aab
+            bin/*.aab
+
