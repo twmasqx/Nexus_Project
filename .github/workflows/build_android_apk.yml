@@ -1,24 +1,19 @@
 name: Build Android APK
 on: [push]
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build APK in Docker (kivy/buildozer)
+      - name: Fix Permissions
+        run: sudo chown -R $USER:$USER .
+      - name: Build
         run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/home/user/hostcwd" \
-            -w /home/user/hostcwd \
-            kivy/buildozer:latest \
-            /bin/bash -lc "buildozer android clean && buildozer -v android debug"
-
-      - name: Upload APK
+          pip install buildozer cython==0.29.33
+          buildozer android clean
+          yes | buildozer android debug
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: nexusvision-apk
-          path: |
-            bin/*.apk
-            bin/*/*.apk
+          name: apk
+          path: bin/*.apk
