@@ -9,7 +9,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build with Buildozer
-        uses: ArtemSerebrennkov/buildozer-action@v1
+        uses: Entepotence/buildozer-action@v1 # هذه هي الأداة البديلة والمستقرة
         with:
           command: buildozer android debug
           repository_root: .
