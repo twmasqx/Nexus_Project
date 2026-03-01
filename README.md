@@ -1,0 +1,2 @@
+# Nexus_Project
+name: Build Android APK on: [push]  jobs:   build:     runs-on: ubuntu-latest     steps:       - uses: actions/checkout@v2        - name: Build with Buildozer         uses: ArtemSerebrennkov/buildozer-action@v1         with:           command: buildozer android debug           repository_root: .
