@@ -3,16 +3,24 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # نسخة مستقرة من لينكس
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev
+          sudo apt install -y libgstreamer1.0-gstreamer-full-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+          sudo apt install -y openjdk-17-jdk-headless zip unzip
+          pip3 install --user --upgrade buildozer
+
       - name: Build with Buildozer
-        uses: Entepotence/buildozer-action@v1 
-        with:
-          command: buildozer android debug
-          repository_root: .
+        run: |
+          # إضافة مسار buildozer للنظام وتشغيل البناء
+          export PATH=$PATH:~/.local/bin
+          buildozer android debug || buildozer android debug # محاولة ثانية في حال حدوث خطأ بسيط
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
