@@ -6,11 +6,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # تم التحديث إلى v4
 
       - name: Build APK in Docker (kivy/buildozer)
         run: |
-          # use the official kivy/buildozer image to run buildozer inside container
+          # استخدام حاوية buildozer الرسمية لبناء التطبيق
           docker run --rm \
             -v "${{ github.workspace }}:/home/user/hostcwd" \
             -w /home/user/hostcwd \
@@ -18,7 +18,7 @@ jobs:
             /bin/bash -lc "buildozer -v android debug"
 
       - name: Upload built APK (artifact)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # هنا حل المشكلة: التحديث إلى v4
         with:
           name: nexusvision-apk
           path: |
@@ -26,4 +26,3 @@ jobs:
             bin/*/*.apk
             bin/*/*.aab
             bin/*.aab
-
