@@ -350,20 +350,29 @@ class NetworkEngine:
 
     def set_device_bandwidth_limit(self, ip: str, mac: str, down_kbps: int = 0, up_kbps: int = 0) -> bool:
         """
-        تحديد سرعة الإنترنت لجهاز باستخدام tc (Traffic Control).
-        يتطلب Root. 0 = بلا حد.
+        تحديد السرعة: tc أولاً، iptables كبديل. Root مطلوب. 0 = بلا حد.
         """
         if not is_root_available():
             return False
         if platform.system() == 'Windows':
             return False
+        for d in self.devices:
+            if d.ip == ip or d.mac == mac:
+                d.speed_limit_down_kbps = down_kbps
+                d.speed_limit_up_kbps = up_kbps
+                break
+        if down_kbps <= 0 and up_kbps <= 0:
+            return True
+        if self._apply_tc_limit(ip, mac, down_kbps, up_kbps):
+            return True
+        return self._apply_iptables_limit(ip, down_kbps, up_kbps)
+
+    def _apply_tc_limit(self, ip: str, mac: str, down_kbps: int, up_kbps: int) -> bool:
+        """تطبيق الحد عبر tc"""
         try:
             import subprocess
             iface = self.get_default_interface()
-            base = f'tc qdisc show dev {iface} | grep -q "htb"'
-            subprocess.run(['sh', '-c', base], capture_output=True, timeout=2)
-            down = max(1, down_kbps) if down_kbps else 999999
-            up = max(1, up_kbps) if up_kbps else 999999
+            down = max(1, down_kbps)
             class_id = abs(hash(mac) % 200) + 10
             cmds = [
                 f'tc qdisc add dev {iface} root handle 1: htb default 30 2>/dev/null || true',
@@ -373,15 +382,23 @@ class NetworkEngine:
             ]
             for cmd in cmds:
                 subprocess.run(['sh', '-c', cmd], capture_output=True, timeout=5)
-            for d in self.devices:
-                if d.ip == ip or d.mac == mac:
-                    d.speed_limit_down_kbps = down_kbps
-                    d.speed_limit_up_kbps = up_kbps
-                    break
-            _log(f"Bandwidth limit: {ip} -> {down_kbps}kbps down, {up_kbps}kbps up", 'gateway')
+            _log(f"tc: {ip} -> {down_kbps}kbps", 'gateway')
             return True
         except Exception as e:
-            _log(f"tc limit failed: {e}", 'gateway')
+            _log(f"tc failed: {e}", 'gateway')
+            return False
+
+    def _apply_iptables_limit(self, ip: str, down_kbps: int, up_kbps: int) -> bool:
+        """بديل: iptables rate limit"""
+        try:
+            import subprocess
+            rate = max(1, down_kbps // 8)
+            cmd = f'iptables -A FORWARD -s {ip} -m limit --limit {rate}k/sec -j ACCEPT 2>/dev/null || true'
+            subprocess.run(['sh', '-c', cmd], capture_output=True, timeout=5)
+            _log(f"iptables: {ip} -> {down_kbps}kbps", 'gateway')
+            return True
+        except Exception as e:
+            _log(f"iptables failed: {e}", 'gateway')
             return False
 
     def record_traffic(self, mac: str, bytes_val: int, direction: str):
