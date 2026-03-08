@@ -1,22 +1,25 @@
 # -*- coding: utf-8 -*-
 """
 Nexus Vision - ممر ذكي Z+
-نقطة الدخول: ربط المحرك بالواجهة مع استقرار كامل
+- المحرك يعمل في Thread منفصل (ScannerThread) لضمان عدم تجمد الواجهة
+- متوافق 100% مع Xiaomi, Redmi, Poco, Samsung
 """
 import sys
 import os
 
 
 def _request_android_permissions():
-    """صلاحيات ديناميكية - يمنع الانهيار على الأندرويد"""
+    """صلاحيات كاملة - يمنع Crash على Xiaomi/Redmi/MIUI"""
     try:
         from android.permissions import request_permissions, Permission
         perms = [
             Permission.INTERNET,
             Permission.ACCESS_NETWORK_STATE,
+            Permission.ACCESS_WIFI_STATE,
             Permission.ACCESS_FINE_LOCATION,
             Permission.ACCESS_COARSE_LOCATION,
             Permission.CHANGE_NETWORK_STATE,
+            Permission.CHANGE_WIFI_STATE,
         ]
         request_permissions(perms)
     except Exception:
