@@ -8,6 +8,8 @@ import time
 import threading
 import os
 import platform
+import socket
+import ipaddress
 from typing import List, Dict, Optional
 
 # استيراد scapy
@@ -203,6 +205,12 @@ class NetworkEngine:
         except Exception:
             return False
 
+    def _is_windows(self) -> bool:
+        try:
+            return platform.system() == 'Windows'
+        except Exception:
+            return False
+
     def _set_error(self, msg: str, exc: Optional[Exception] = None) -> None:
         try:
             if exc is not None:
@@ -349,6 +357,69 @@ class NetworkEngine:
         except Exception:
             pass
         return '192.168.1.1'
+
+    def _simple_ip_sweep(self, ip_range: str = '192.168.1.0/24', timeout: float = 0.4) -> List[str]:
+        """
+        مسح خفيف عبر socket.connect بدون scapy أو WinPcap.
+        - يعمل على Windows و Android بدون Root.
+        - يحاول الاتصال على المنافذ 80/443/53 لتحديد الأجهزة الحية.
+        """
+        hosts: List[str] = []
+        try:
+            try:
+                net = ipaddress.ip_network(ip_range, strict=False)
+            except Exception:
+                net = ipaddress.ip_network('192.168.1.0/24', strict=False)
+            # تجنب شبكات ضخمة جداً
+            if net.num_addresses > 512:
+                # نقيّد إلى /24 حول البوابة
+                gw = self.get_gateway_ip()
+                try:
+                    gw_ip = ipaddress.ip_address(gw)
+                    base = ipaddress.ip_network(f"{gw_ip.exploded.rsplit('.',1)[0]}.0/24", strict=False)
+                    net = base
+                except Exception:
+                    net = ipaddress.ip_network('192.168.1.0/24', strict=False)
+            common_ports = [80, 443, 53]
+            for ip in net.hosts():
+                ip_str = str(ip)
+                alive = False
+                for port in common_ports:
+                    try:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        s.settimeout(timeout)
+                        s.connect((ip_str, port))
+                        s.close()
+                        alive = True
+                        break
+                    except OSError as e:
+                        # host up لكن المنفذ مغلق -> ECONNREFUSED
+                        if getattr(e, 'errno', None) in (111, 61, 10061):
+                            alive = True
+                            break
+                    except Exception:
+                        pass
+                if alive:
+                    hosts.append(ip_str)
+        except Exception as e:
+            self._set_error("Simple IP sweep failed", e)
+        return hosts
+
+    def _devices_from_ips(self, ips: List[str]) -> List[Device]:
+        """تحويل قائمة IPs إلى أجهزة بسيطة عند غياب MAC/scapy."""
+        devs: List[Device] = []
+        for ip in ips:
+            try:
+                mac = '00:00:00:00:00:00'
+                vendor = 'Unknown'
+                x = random.uniform(-1.0, 1.0)
+                y = random.uniform(-1.0, 1.0)
+                d = Device(ip=ip, mac=mac, vendor=vendor, x=x, y=y)
+                d.model = 'Host'
+                devs.append(d)
+            except Exception:
+                continue
+        return devs
 
     def get_default_interface(self) -> str:
         """الحصول على واجهة الشبكة الافتراضية (wlan0, eth0 ...)"""
@@ -875,23 +946,23 @@ class NetworkEngine:
 
     def _scan_network_impl(self, ip_range: str = '192.168.1.0/24', timeout: int = 2, allow_simulation: bool = False, deep_scan: bool = False) -> List[Device]:
         global SCAPY_AVAILABLE
-        if not SCAPY_AVAILABLE:
-            # scapy غير متوفر
-            if allow_simulation:
-                self.devices = self._simulate_devices()
-                return self.devices
-            else:
-                # لا نولد أجهزة افتراضية إلا إذا سُمح صراحة
-                with self._lock:
-                    self.devices = []
-                return []
+        # في حال عدم توفر scapy أو بيئة لا تسمح بـ L2 (Windows/Android بدون Root) نستخدم socket sweep
+        if not SCAPY_AVAILABLE or self._is_windows():
+            ips = self._simple_ip_sweep(ip_range)
+            devs = self._devices_from_ips(ips)
+            with self._lock:
+                self.devices = devs
+            return devs
 
         try:
             if self._is_android() and not is_root_available():
-                # على أندرويد بدون Root: لا نحاول L2 ARP scan (يسبب أخطاء/انهيار على بعض الأجهزة)
-                self._set_error("Root not available. Active device scan disabled; use Monitor only.")
+                # على أندرويد بدون Root: نستخدم socket sweep بدلاً من ARP عبر scapy
+                ips = self._simple_ip_sweep(ip_range)
+                devs = self._devices_from_ips(ips)
                 with self._lock:
-                    return list(self.devices)
+                    self.devices = devs
+                self._set_error("Root not available. Using socket-based discovery instead of ARP scan.")
+                return devs
 
             # تعطيل رسائل scapy الزائدة
             conf.verb = 0
@@ -934,11 +1005,14 @@ class NetworkEngine:
             with self._lock:
                 return list(self.devices)
         except OSError as e:
-            # غالباً libpcap / raw socket issues
-            self._set_error("Scapy runtime error (libpcap/raw socket missing).", e)
+            # غالباً libpcap / WinPcap / raw socket issues على Windows
+            self._set_error("Scapy runtime error (WinPcap/libpcap). Falling back to socket discovery.", e)
             SCAPY_AVAILABLE = False
+            ips = self._simple_ip_sweep(ip_range)
+            devs = self._devices_from_ips(ips)
             with self._lock:
-                return list(self.devices)
+                self.devices = devs
+            return devs
         except Exception as e:
             self._set_error("Active scan failed. Switching to normal mode.", e)
             with self._lock:
