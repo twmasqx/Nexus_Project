@@ -328,6 +328,11 @@ class DeviceListItem(MDBoxLayout):
         self.spacing = dp(4)
         self.padding = [dp(10), dp(6)]
         self._muted = getattr(device, 'muted', False)
+        with self.canvas.before:
+            Color(*COLORS['glass'])
+            self._glass_rect = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=lambda *a: setattr(self._glass_rect, 'pos', self.pos) if hasattr(self, '_glass_rect') else None)
+        self.bind(size=lambda *a: setattr(self._glass_rect, 'size', self.size) if hasattr(self, '_glass_rect') else None)
 
         row = MDBoxLayout(orientation='horizontal', size_hint_y=None, height=dp(44))
         icon_w = IconLeftWidget(icon=_device_type_icon(device))
