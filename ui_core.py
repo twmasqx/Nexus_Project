@@ -564,11 +564,26 @@ class NexusVisionApp(MDApp):
         return root
 
     def on_start(self):
-        """بدء المحرك بعد 2 ثانية لضمان استقرار الواجهة"""
+        """طلب الصلاحيات بعد ظهور الواجهة ثم بدء المحرك — يمنع الخروج عند الموافقة"""
         try:
             self.engine.on_intruder = self._on_intruder_detected
         except Exception:
             pass
+
+        def _request_permissions_later(dt):
+            """طلب الصلاحيات بعد ثانية من فتح التطبيق — بدون الموقع لتفادي خروج التطبيق عند الموافقة"""
+            try:
+                from android.permissions import request_permissions, Permission
+                perms = [
+                    Permission.INTERNET,
+                    Permission.ACCESS_NETWORK_STATE,
+                    Permission.ACCESS_WIFI_STATE,
+                    Permission.CHANGE_NETWORK_STATE,
+                    Permission.CHANGE_WIFI_STATE,
+                ]
+                request_permissions(perms)
+            except Exception:
+                pass
 
         def _start_engine(dt):
             try:
@@ -585,6 +600,7 @@ class NexusVisionApp(MDApp):
             except Exception:
                 pass
 
+        Clock.schedule_once(_request_permissions_later, 1.0)
         Clock.schedule_once(_start_engine, 2.0)
 
     def _on_intruder_detected(self, device: Device):
