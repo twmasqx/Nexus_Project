@@ -422,6 +422,7 @@ class NexusVisionApp(MDApp):
         self._monitor_dialog = None
         self._monitor_log_refresh = None
         self._device_list_items = {}
+        self._last_engine_error = None
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "Cyan"
         self.theme_cls.accent_palette = "Teal"
@@ -600,7 +601,8 @@ class NexusVisionApp(MDApp):
             except Exception:
                 pass
 
-        Clock.schedule_once(_request_permissions_later, 1.0)
+        # Xiaomi/MIUI: تأخير طلب الصلاحيات يقلل احتمال إعادة تشغيل التطبيق عند الموافقة
+        Clock.schedule_once(_request_permissions_later, 1.5)
         Clock.schedule_once(_start_engine, 2.0)
 
     def _on_intruder_detected(self, device: Device):
@@ -789,6 +791,9 @@ class NexusVisionApp(MDApp):
             if started:
                 self._sniffer_running = True
                 self.btn_monitor.text = "Stop Monitor"
+            else:
+                self._maybe_show_engine_error()
+                self._show_snackbar("Monitor unavailable on this device.")
         else:
             try:
                 self.engine.stop_passive_sniffer()
@@ -845,8 +850,24 @@ class NexusVisionApp(MDApp):
             except Exception:
                 print(text)
 
+    def _maybe_show_engine_error(self):
+        """عرض رسالة واحدة عند فشل scapy/libpcap/root على أندرويد"""
+        try:
+            if not self.engine:
+                return
+            msg = getattr(self.engine, 'last_error', None)
+            if not msg:
+                return
+            if msg == self._last_engine_error:
+                return
+            self._last_engine_error = msg
+            self._show_snackbar(f"Network Engine Error: {msg}")
+        except Exception:
+            pass
+
     def _pull_engine(self, dt):
         if self.engine:
+            self._maybe_show_engine_error()
             total_rx = total_tx = 0.0
             if hasattr(self.engine, 'get_device_traffic_stats'):
                 try:
