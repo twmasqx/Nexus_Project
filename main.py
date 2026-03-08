@@ -8,26 +8,9 @@ import sys
 import os
 
 
-def _request_android_permissions():
-    """صلاحيات كاملة - يمنع Crash على Xiaomi/Redmi/MIUI"""
-    try:
-        from android.permissions import request_permissions, Permission
-        perms = [
-            Permission.INTERNET,
-            Permission.ACCESS_NETWORK_STATE,
-            Permission.ACCESS_WIFI_STATE,
-            Permission.ACCESS_FINE_LOCATION,
-            Permission.ACCESS_COARSE_LOCATION,
-            Permission.CHANGE_NETWORK_STATE,
-            Permission.CHANGE_WIFI_STATE,
-        ]
-        request_permissions(perms)
-    except Exception:
-        pass
-
-
 def main():
-    _request_android_permissions()
+    # لا نطلب الصلاحيات هنا — طلبها قبل فتح الواجهة يسبب خروج التطبيق عند الموافقة.
+    # يتم طلبها من الواجهة بعد الظهور (انظر ui_core.on_start).
 
     from ui_core import NexusVisionApp
     from network_engine import NetworkEngine, precheck_environment
