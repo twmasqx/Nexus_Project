@@ -51,9 +51,8 @@ jobs:
           path: build.log
 
       - name: Upload APK
-        if: always()  # لضمان المحاولة حتى لو حدث تحذير
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nexusvision-apk
-
-          path: ./**/*.apk
+          path: bin/*.apk
