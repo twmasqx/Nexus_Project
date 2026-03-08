@@ -17,6 +17,13 @@ try:
 except Exception:
     SCAPY_AVAILABLE = False
 
+# على أندرويد غالباً libpcap غير متوفر. نجبر Scapy على عدم استخدام pcap إن أمكن.
+if SCAPY_AVAILABLE:
+    try:
+        conf.use_pcap = False  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
 # منافذ شائعة للـ OS fingerprinting
 COMMON_PORTS = {
     22: 'SSH',
@@ -180,12 +187,31 @@ class NetworkEngine:
         self.device_traffic: Dict[str, Dict] = {}
         self._traffic_lock = threading.Lock()
         self._live_domains: deque = deque(maxlen=200)
+        self.last_error: Optional[str] = None
+        self.last_error_ts: float = 0.0
         try:
             self.load_requests_log()
             self._load_known_devices()
         except Exception:
             pass
         self._load_remote_config()
+
+    def _is_android(self) -> bool:
+        try:
+            from kivy.utils import platform as kivy_platform  # type: ignore
+            return kivy_platform == 'android'
+        except Exception:
+            return False
+
+    def _set_error(self, msg: str, exc: Optional[Exception] = None) -> None:
+        try:
+            if exc is not None:
+                msg = f"{msg} ({type(exc).__name__}: {exc})"
+        except Exception:
+            pass
+        self.last_error = msg
+        self.last_error_ts = time.time()
+        _log(msg, 'engine')
 
     def _load_known_devices(self):
         """تحميل الأجهزة المعروفة من السجل"""
@@ -572,6 +598,9 @@ class NetworkEngine:
         """
         if not SCAPY_AVAILABLE:
             return False
+        if self._is_android() and not is_root_available():
+            self._set_error("Passive monitor requires Root on Android. Running normal mode.")
+            return False
 
         # علامة إيقاف آمنة
         self._sniffer_stop = threading.Event()
@@ -757,6 +786,10 @@ class NetworkEngine:
                 from scapy.all import sniff
                 sniff(iface=iface, prn=_process_packet, store=0, stop_filter=lambda x: getattr(self, '_sniffer_stop', threading.Event()).is_set())
             except Exception:
+                try:
+                    self._set_error("Traffic sniffer failed to start. Missing libpcap or insufficient permissions.")
+                except Exception:
+                    pass
                 return
 
         t = threading.Thread(target=_sniff_loop, daemon=True)
@@ -833,11 +866,15 @@ class NetworkEngine:
         try:
             return self._scan_network_impl(ip_range, timeout, allow_simulation, deep_scan)
         except Exception as e:
-            _log(f"scan fallback: {e}", 'info')
+            try:
+                self._set_error("Network scan failed", e)
+            except Exception:
+                _log(f"scan fallback: {e}", 'info')
             with self._lock:
                 return list(self.devices)
 
     def _scan_network_impl(self, ip_range: str = '192.168.1.0/24', timeout: int = 2, allow_simulation: bool = False, deep_scan: bool = False) -> List[Device]:
+        global SCAPY_AVAILABLE
         if not SCAPY_AVAILABLE:
             # scapy غير متوفر
             if allow_simulation:
@@ -850,6 +887,12 @@ class NetworkEngine:
                 return []
 
         try:
+            if self._is_android() and not is_root_available():
+                # على أندرويد بدون Root: لا نحاول L2 ARP scan (يسبب أخطاء/انهيار على بعض الأجهزة)
+                self._set_error("Root not available. Active device scan disabled; use Monitor only.")
+                with self._lock:
+                    return list(self.devices)
+
             # تعطيل رسائل scapy الزائدة
             conf.verb = 0
             # تنفيذ ARP-scan عبر البث
@@ -886,14 +929,20 @@ class NetworkEngine:
                 threading.Thread(target=_enhance, daemon=True).start()
             return found
 
-        except PermissionError:
-            # لا توجد صلاحيات لفتح الشبكة - نعود للمحاكاة
-            self.devices = self._simulate_devices()
-            return self.devices
-        except Exception:
-            # أي أخطاء أخرى نستخدم المحاكاة الاحتياطية
-            self.devices = self._simulate_devices()
-            return self.devices
+        except PermissionError as e:
+            self._set_error("Permission denied for active scan (Root required).", e)
+            with self._lock:
+                return list(self.devices)
+        except OSError as e:
+            # غالباً libpcap / raw socket issues
+            self._set_error("Scapy runtime error (libpcap/raw socket missing).", e)
+            SCAPY_AVAILABLE = False
+            with self._lock:
+                return list(self.devices)
+        except Exception as e:
+            self._set_error("Active scan failed. Switching to normal mode.", e)
+            with self._lock:
+                return list(self.devices)
 
 
 def precheck_environment() -> Dict[str, str]:
